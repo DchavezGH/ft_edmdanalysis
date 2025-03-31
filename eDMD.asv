@@ -1,0 +1,77 @@
+%This program will perform extendedDMD, it will not call the DMD.m function
+%so we get more flexibility
+
+%Load header info:
+headerInfo = load('sub-001_ses-01_task-WorkingMemory_run-1_eeg.set', '-mat');
+
+% Load EEG time-series matrix (taken from eeg_getdatact.m centered at line 233)
+fid = fopen('sub-001_ses-01_task-WorkingMemory_run-1_eeg.fdt', 'r', 'ieee-le');
+for trialIdx = 1:headerInfo.trials % In case the saved data are epoched, loop the process for each epoch. Thanks Ramesh Srinivasan!
+    currentTrialData = fread(fid, [headerInfo.nbchan headerInfo.pnts], 'float32');
+    data(:,:,trialIdx) = currentTrialData; % Data dimentions are: electrodes, time points, and trials (the last one is for epoched data)                  
+end
+fclose(fid);
+nstacks=10;
+r=400; %% rank truncation smaller r finish fast at the expense of precision
+dt = 0.004; %Considering a sampling rate of 250Hz
+X_0 = currentTrialData; %Raw data
+ch = size(X_0, 1);  %number of channels in the data
+cols = size(X_0, 2); %number of data points in the data
+t = dt.*(1:cols);
+X_0 = movmean(X_0,10);     %This is a mobile mean function that makes our data smoth
+
+X_osc =100.* sin(repmat(0.1.*t, 71, 1)); %This is a boring sinthetic dataset, comment it when not needed
+
+%X_0=X_0+X_osc;   %Here, we instroduce a sine oscillation that should be trivial to represent by DMD
+X_0=X_osc;
+
+
+
+% stacking the data matrix in substitution of lines 46 to 50:
+if nstacks > 1
+    Xaug = [];
+    for st = 1:nstacks
+        Xaug = [Xaug; X_0(:, st:end-nstacks+st)]; 
+    end
+    
+    X1 = Xaug(:, 1:end-1);
+    X2 = Xaug(:, 2:end);
+else
+    X1 = X_0(:, 1:end-1);
+    X2 = X_0(:, 2:end);
+end;
+
+
+
+
+%Since now were stacking, these bit will be omited
+%{
+X1 = X_0(:,1:end -1); %% data snapshots
+X2 = X_0(:,2:end); %% shifted data
+%}
+
+[U2,Sigma2 ,V2] = svd(X1, 'econ'); %Performs svd on the data
+U=U2(:,1:r); Sigma=Sigma2(1:r,1:r); V=V2(:,1:r); % r-truncate U, Sigma & V
+Atilde = U'*X2*V/Sigma; %Define the DMD approximation to the A matrix
+[W,D] = eig(Atilde);  % Compute the eigendecomposition of A: 
+                      % W is the matrix of eigenvectors
+                      % D is the \Delta diagonal matrix of eigenvalues
+Phi=X2*V/Sigma*W;     %Columns of Phi are eigenmodes
+lambda=diag (D);      %Eigenvalue vector
+%Executed up to here 
+omega=log(lambda)/dt;
+%This bit was missing:
+x1 = X1(:, 1);
+y0 = Phi\x1; % initial conditions "z" vector. 
+             %  \ solves y0 in Phi(y0)=x1
+q_modes = zeros(r,length(t)); %% DMD modes
+for iter = 1:length(t)
+q_modes(:,iter ) =(y0.*exp(omega*(t(iter))));
+end
+q_dmd = real(Phi*q_modes); %% DMD approximation
+
+figure;
+imagesc(q_dmd);
+figure;
+imagesc(X1);
+
