@@ -1,35 +1,37 @@
 clear all
 %PARAMETERS:
 dt = 0.004;                  % delta*t Considering a sampling rate of 250Hz
-nstacks = 4;                                          %Stacking parameter
-r = 5;                                              %SVD: rank truncation 
-N = 200;                 %ARTIFICIAL DATASET: number of channels in the data
-M = 160;              %ARTIFICIAL DATASET: number of snapshots in the data
+nstacks = 10 ;                                          %Stacking parameter
+r = 11;                                              %SVD: rank truncation 
+N = 70;                 %ARTIFICIAL DATASET: number of channels in the data
+M = 1600;              %ARTIFICIAL DATASET: number of snapshots in the data
 t = dt.*(1:M);                             %ARTIFICIAL DATASET: Time vector
+omega = 17.5;                      % ARTIFICIAL DATASET: Frequency multiplier
+tau = 1.2;                            % ARTIFICIAL DATASET: delay parameter
+Np = 0.0000;                               % ARTIFICIAL DATASET: Noise parameter
+MA = 3;                      %ARTIFICIAL DATASET: Moving average parameter
 
 %ARTIFICIAL DATASET:
-n = N/2;
-A = [0.9, -0.1; %A dynamics 
-     0, 0.8];
-AA = zeros(size(A,1) * n, size(A,2) * n);
+No = Np.*(randn(N,M));                                         %White noise
+f0 = 1;          % start frequency
+f1 = 0.01;         %end freq
+%X_osc = cos(2*pi*(f0*t + (f1 - f0)/(2*t(end)) * t.^2));
+%X_osc = t+cos(2*pi*t);
+%X_osc = t.^2;
+X_osc = 1./(1+exp(-t));
+X_zero= zeros(N,M);
+X_zero(5:7, :) = repmat(X_osc, 3, 1);
+X_zero(17:19, :) = repmat(X_osc, 3, 1);
+%Xconst= zeros(N,M);
+%Xconst(5:7, :) = 2;
+X_0 = X_zero + No;
+Xcol = X_0(:);
+X_col_n = normalize(Xcol, "range");
+X_0_rec = reshape(X_col_n, N, M);
+%X_0 = movmean(X_0,MA);   %This is a mobile mean function that makes our data a bit more smoth
+X1 = X_0_rec(:, 1:end-1);
+X2 = X_0_rec(:, 2:end);
 
-
-for i = 1:n  %Block sized dynamics
-    AA((i-1)*size(A,1) + 1 : i*size(A,1), (i-1)*size(A,2) + 1 : i*size(A,2)) = A;
-end
-x0 = randn(N,1);  % initial state x(0)
-
-%x0 = [1; 1];  % initial state x(0)
-X_0 = zeros(N, M + 1); % Initialized dataset matrix
-X_0(:, 1) = x0; %Initial state
-for n = 1:M
-    X_0(:, n+1) = AA * X_0(:, n);
-end
-
-
-
-X1 = X_0(:, 1:end-1);
-X2 = X_0(:, 2:end);
 
 %Here we will perform stacking:
 %nstacks = 1;  %Stacking, at the parameters section
@@ -48,19 +50,32 @@ end
 N = size(X1,1);  %number of channels in the stack
 M = size(X1,2); %number of snapshots in the stack 
 
+%A very very short eDMD dictionary, for testing purposes
+% X1e = [0.*abs(X1).^2; X1];
+% X2e = [0.*abs(X2).^2; X2];
 
-tD = t(:,1:M) ;
-tDic = repmat(tD, N,1);
-cst = ones(N,M);
+%We define activity clusters to help us represent activity relations
+C1 = mean(X_0(5:7, 1:end-nstacks), 1);
+C2 = mean(X_0(17:19, 1:end-nstacks), 1);
+C3 = mean(X_0(55:57, 1:end-nstacks), 1); %unrelated area in the occipital lobe
 
 
-%Dictionary
+% X1e = [X1 ; 0.*C1.*X1 ; 0.*C2.*X1 ; 0.*C3.*X1 ];
+% X2e = [X2 ; 0.*C1.*X2 ; 0.*C1.*X2 ; 0.*C1.*X2 ];
+% X1e = [X1 ; 0.*C1.*X1 ; 0.*C2.*X1 ; 0.*C3.*X1 ; 0.*asind(X1); 0.*acos(X1) ];
+% X2e = [X2 ; 0.*C1.*X2 ; 0.*C1.*X2 ; 0.*C1.*X2 ; 0.*asind(X2); 0.*acos(X2) ];
+% X1e = [X1 ; C1.*X1 ; C2.*X1 ; C3.*X1 ; asind(X1); acos(X1) ];
+% X2e = [X2 ; C1.*X2 ; C1.*X2 ; C1.*X2 ; asind(X2); acos(X2) ];
+ %X1e = [X1 ; 0.* cos(2*pi*(f0*X1 + (f1 - f0)/(2*X1(end)) * X1.^2)) ];
+ %X2e = [X2 ; 0.* cos(2*pi*(f0*X2 + (f1 - f0)/(2*X2(end)) * X2.^2))  ];
+% X1e = [X1 ;  cos(2*pi*(f0*X1 + (f1 - f0) * X1.^2)) ];
+% X2e = [X2 ;  cos(2*pi*(f0*X2 + (f1 - f0) * X2.^2)) ];
+
+ X1e = [X1 ; 1./(1+exp(-X1))  ];
+ X2e = [X2 ; 1./(1+exp(-X2))  ];
 
 
-%X1e = [X1 ; X1.^2 ; X1.^3 ; X1.^4];
-%X2e = [X2 ; X2.^2 ; X2.^3 ; X2.^4]; 
-X1e = [X1 ];
-X2e = [X2 ]; 
+% X_osc = 1./(1+exp(-t));
 
 
 Psi_mX = X1e.'; %Proper variable naming
@@ -75,9 +90,9 @@ k = size(X2e, 1);  %dimension of the observables vector
 
 
 b_top = eye(N);
-%b_low = zeros(3*N,N);
-%B = [b_top;b_low];
-B=b_top;
+b_low = zeros(1*N,N);
+B = [b_top;b_low];
+
 %X1e and X2e are Psi_M transposed, run the next couple lines to verify
 %that B fulfils eq16 in Williams:
  %  Cr=transpose(B)*transpose(Psi_mX);
@@ -138,32 +153,33 @@ Xr_rec = reshape(Xr_col_n, orN, M);
 %Graphs: Artificial dataset and eDMD reconstruction
 figure;
 subplot(2,1,1)
-surf(X_0, 'EdgeColor','none')
+surf(X_0_rec, 'EdgeColor','none')
 title('artificial dataset')
 subplot(2,1,2)
 surf(Xr_rec, 'EdgeColor','none')
+title(sprintf('eDMD, period (\\omega = %.2f)', omega));   % Add omega value
 title('eDMD reconstruction')
 
 %Graphs: Eigenvalues, left and right eigenvectors
-% figure;
-% subplot(2,3,1)
-% surf(real(Wnn), 'EdgeColor','none')
-% title('real W normalized');
-% subplot(2,3,2)
-% surf(real(XI), 'EdgeColor','none')
-% title('real XI');
-% subplot(2,3,3)
-% surf(real(MU), 'EdgeColor','none')
-% title('real MU');
-% subplot(2,3,4)
-% surf(imag(Wnn), 'EdgeColor','none')
-% title('imag W normalized');
-% subplot(2,3,5)
-% surf(imag(XI), 'EdgeColor','none')
-% title('imag XI');
-% subplot(2,3,6)
-% surf(imag(MU), 'EdgeColor','none')
-% title('imag MU');
+figure;
+subplot(2,3,1)
+surf(real(Wnn), 'EdgeColor','none')
+title('real W normalized');
+subplot(2,3,2)
+surf(real(XI), 'EdgeColor','none')
+title('real XI');
+subplot(2,3,3)
+surf(real(MU), 'EdgeColor','none')
+title('real MU');
+subplot(2,3,4)
+surf(imag(Wnn), 'EdgeColor','none')
+title('imag W normalized');
+subplot(2,3,5)
+surf(imag(XI), 'EdgeColor','none')
+title('imag XI');
+subplot(2,3,6)
+surf(imag(MU), 'EdgeColor','none')
+title('imag MU');
 
 %Graphs: SVD singular values (and truncated sv)
 figure;
