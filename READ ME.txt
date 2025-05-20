@@ -1,0 +1,7 @@
+This version of our EDMD code is NOT performing proper reconstruction but it runs ok
+It does not have the SVD changes
+It does not have corrections on the congugate transpose 
+It does not adress unstable eigenvalues 
+
+
+20 March 2025
