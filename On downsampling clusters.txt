@@ -1,6 +1,0 @@
-When clusters are generated to associate the activity of several brain areas, the lenght of a cluster array is larger than the lenght of rows of X1e and X2e
-A way of dealing with this is downsample X1e and X2e, extrapolate the clusters or any other smilar technique
-
-We decide against it, since a basic objective of stacking and clustering is to access delay-reated phenomena. If we simply disregard the last "nstacks" elements of the clusters, 
-we are still capable of capturing most dynamics. Even more, if a given signal was caused by activity at the last entries of a clusted, it would be reflected outside of the scope of the measurement. 
-Therefore, we can confidently disregard the last "nstacks" elements of the clusters
