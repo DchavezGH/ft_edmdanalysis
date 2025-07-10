@@ -1,8 +1,18 @@
+%This code generates an artificial dataset (with  two oscillatory signals),
+% performs eDMD on it via a random Fourier features dictionary,and generates
+% power VS frequency graphs
+
+
+
+
+
+
 clear all
 %PARAMETERS:
 %dt = 0.004;                  % delta*t Considering a sampling rate of 250Hz
-nstacks = 3;                                          %Stacking parameter
-r = 10;                                              %SVD: rank truncation 
+nstacks = 5;                                          %Stacking parameter
+r = 155;                                              %SVD: rank truncation 
+%r = 1200;
 N = 2;                 %ARTIFICIAL DATASET: number of channels in the data
 M = 160;              %ARTIFICIAL DATASET: number of snapshots in the data
 %t = dt.*(1:M);       %ARTIFICIAL DATASET: Time vector, temporarily ignored
@@ -10,15 +20,26 @@ t = linspace(0, 1, M); %This is needed further down to build B
 omega = 17.5;                      % ARTIFICIAL DATASET: Frequency multiplier
 tau = 1.2;                            % ARTIFICIAL DATASET: delay parameter
 MA = 3;                      %ARTIFICIAL DATASET: Moving average parameter
+D = 600;              % Half the number of total features (final dim = 2D)
+nop = 0;            %ARTIFICIAL DATASET: Noise parameter
 
 %ARTIFICIAL DATASET:
 Nn= N;     %Safekeeping original channel dim
-Xs = -0.4.*exp(-(12.*t-7).^2).*sin(100.*t);
-Xss = 0.9.*sin(15.*t);
+%Xs = -4.*exp(-(12.*t-7).^2).*sin(100.*t); %This works
+Xs = 0.9.*sin(200.*t);    %This works
+Xss = 0.9.*sin(20.*t);    %This works
+
+
+%Xs = -4.*exp(-(12.*t-7).^2).*sin(100.*t);
+%Xss = 0.9.*sin(60.*t);
 Xi = repmat(Xs, N/2, 1);
 Xii = repmat(Xss, N/2, 1);
 X_zero = [Xi;Xii];
-X_0_rec = X_zero; %take it off when retaking normalization
+%X_zero = randn(size(X_zero ));  %substitute data for a random array
+X_noise = nop.*randn(size(X_zero ));  %add a random array to the data
+%X_0_rec = X_zero; %take it off when retaking normalization
+X_0_rec  = X_zero+X_noise;
+
 
 X1 = X_zero(:, 1:end-1);
 X2 = X_zero(:, 2:end);
@@ -53,23 +74,27 @@ t = linspace(0, 1, M);
 % 
 % Psi_mX = X1e.'; %Proper variable naming
 % Psi_mY = X2e.';
-D = 900;              % Number of random f. features 
-%sigma = 0.25;          % related to gamma: gamma=1/2sigma^2
-sigma = 200;
-rng(1);               % random seed 
+
+
+
+%D = 600;              % Half the number of total features (final dim = 2D)
+sigma = 1;          % Bandwidth for the RBF kernel
+rng(18347);               % Seed for reproducibility
 
 % --- RFF MAPPING SETUP ---
 N = size(X1, 1);                      % Input dimension
-W = randn(D, N) / sigma;             % D x N matrix of random frequencies
-b = 2 * pi * rand(D, 1);             % D x 1 vector of random phase shifts
+W = randn(D, N) / sigma;             % Random frequency vectors: D x N
+b = 2 * pi * rand(D, 1);             % Random phase shifts: D x 1
 
-% --- RFF TRANSFORMATION ---
-Psi_mX = sqrt(2 / D) * cos(W * X1 + b);  % D x M
-Psi_mY = sqrt(2 / D) * cos(W * X2 + b);  % D x M
+% --- RFF TRANSFORMATION WITH COS/SIN PAIRS ---
+WX1 = W * X1 + b * ones(1, size(X1,2));  % Now D×M
+WX2 = W * X2 + b * ones(1, size(X2,2));
+
+Psi_mX = sqrt(1 / D) * [cos(WX1); sin(WX1)];  % (2D) x M
+Psi_mY = sqrt(1 / D) * [cos(WX2); sin(WX2)];
 
 Psi_mX = Psi_mX'; 
 Psi_mY = Psi_mY';
-%Aqui me pregunto, como hacemos compatible el diccionario nuevo con la generacion de la matrix B, 
 
 %GENERATE THE B MATRIX: weights that are used to build the koopman modes
 
@@ -126,7 +151,6 @@ Kt = u_t*sig_t*v_t' ;   %Generates the truncated Kt
 [XI,MU,W] = eig(Kt,"nobalance");       %Generate eigenvalues and left-right eigenvctors
 [XIb,MUb,Wb] = eig(Kt); %balanced eigenvalues
 
-
 inerp = sum(conj(W).*XI);                  %Calculate the w_k'xi_k products
 %inerp(inerp< 0.00001) = 0;   %Remove neglible inner p. (0.00001 worked ok) 
 Wn = W./inerp;    %define the scaled w_n left eigenvectors in the u. circle
@@ -157,6 +181,14 @@ Xr_rec = reshape(Xr_col_n, orN, M);
 %ERROR:
 %rem=Xr_rec-X_0(:, 1:1597); %This needs to be generalized!!!
 %E=norm(rem,"fro")/norm(X1,"fro");
+
+%Freq and Power 
+P = vecnorm(V).^2; %Power per mode
+f = diag(abs(imag(MU)./(6.28.*0.004)));
+[fsorted,I] = sort(f);
+Psorted = P(I);
+
+
 
 %Graphs: Artificial dataset and eDMD reconstruction
 figure;
@@ -197,3 +229,15 @@ title('SVD SIGMA');
 subplot(1,2,2)
 plot(sig_t)
 title('truncated SVD sigma');
+
+%Graphs power and frequency per mode
+figure;
+subplot(3,1,1)
+plot(P)
+title('Power per mode')
+subplot(3,1,2)
+plot(diag(f))
+title('freq per mode')
+subplot(3,1,3)
+plot(fsorted,Psorted)
+title('freq vs power')
