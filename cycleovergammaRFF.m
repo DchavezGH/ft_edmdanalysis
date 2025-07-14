@@ -1,18 +1,24 @@
 %This code generates an artificial dataset (with  two oscillatory signals),
 % performs eDMD on it via a random Fourier features dictionary,and generates
-% power VS frequency graphs
+% power VS frequency graphs. Then, it cycles through values of gamma (from 
+% the RFF) dictionary so an "optimal value" can be determined
 
 
+%for siggma = 1.0:-0.2:0.2
+%0.6 and 1 kinda work
+%for siggma = 0.7:-0.02:0.5
+%0.54 0.60 0.62 0.64 0.66 
+%for siggma = 0.1:0.01:0.2
+%0.11 works
+%for siggma = 0.10:0.001:0.12
+%0.11 works haha
+%for siggma = 0.0010:0.00001:0.0012
+%0.00113 kinda works
+%for siggma = [0.00113, 0.11, 0.6, 1]
+siggma = [0.0113];
 
-
-
-
-clear all
-%PARAMETERS:
-%dt = 0.004;                  % delta*t Considering a sampling rate of 250Hz
 nstacks = 5;                                          %Stacking parameter
-r = 155;                                              %SVD: rank truncation 
-%r = 1200;
+r = 152;                                              %SVD: rank truncation 
 N = 2;                 %ARTIFICIAL DATASET: number of channels in the data
 M = 160;              %ARTIFICIAL DATASET: number of snapshots in the data
 %t = dt.*(1:M);       %ARTIFICIAL DATASET: Time vector, temporarily ignored
@@ -21,25 +27,19 @@ omega = 17.5;                      % ARTIFICIAL DATASET: Frequency multiplier
 tau = 1.2;                            % ARTIFICIAL DATASET: delay parameter
 MA = 3;                      %ARTIFICIAL DATASET: Moving average parameter
 D = 600;              % Half the number of total features (final dim = 2D)
-nop = 0;            %ARTIFICIAL DATASET: Noise parameter
+
 
 %ARTIFICIAL DATASET:
 Nn= N;     %Safekeeping original channel dim
 %Xs = -4.*exp(-(12.*t-7).^2).*sin(100.*t); %This works
-Xs = 0.9.*sin(200.*t);    %This works
-Xss = 0.9.*sin(20.*t);    %This works
-
-
-%Xs = -4.*exp(-(12.*t-7).^2).*sin(100.*t);
-%Xss = 0.9.*sin(60.*t);
+%Xss = 0.9.*sin(60.*t);    %This works
+Xs = -4.*exp(-(12.*t-7).^2).*sin(67.*t); 
+Xss = 0.2.*sin(84.*t);    
 Xi = repmat(Xs, N/2, 1);
 Xii = repmat(Xss, N/2, 1);
 X_zero = [Xi;Xii];
-%X_zero = randn(size(X_zero ));  %substitute data for a random array
-X_noise = nop.*randn(size(X_zero ));  %add a random array to the data
-%X_0_rec = X_zero; %take it off when retaking normalization
-X_0_rec  = X_zero+X_noise;
-
+%X_zero = randn(size(X_zero ));
+X_0_rec = X_zero; %take it off when retaking normalization
 
 X1 = X_zero(:, 1:end-1);
 X2 = X_zero(:, 2:end);
@@ -78,8 +78,8 @@ t = linspace(0, 1, M);
 
 
 %D = 600;              % Half the number of total features (final dim = 2D)
-sigma = 1;          % Bandwidth for the RBF kernel
-rng(18347);               % Seed for reproducibility
+sigma = siggma;          % Bandwidth for the RBF kernel
+rng(1);               % Seed for reproducibility
 
 % --- RFF MAPPING SETUP ---
 N = size(X1, 1);                      % Input dimension
@@ -107,18 +107,19 @@ Phi = Psi_mX;
 %Phi should actually contain the elements of Psi_mY, so the least squares
 %problem delivers a useful coeff. matrix: 
 
+%January mod: take away A
 % Preallocate coefficients
-%A = zeros(N, (degree-1)*(N)); %Rows: channels, Columns: polynomial terms DELETE
-A = zeros(N, size(Phi,2));   
-% Fit each channel's time-series data using least squares
-for m = 1:N
-    y = X1(m, :)';                 % Column vector for time series of channel m
-    a = Phi \ y;                  % Solve least squares: Phi * a ≈ y
-    A(m, :) = a';                 % Store in row
-end
-
-
-lqrec = Phi * A';
+% %A = zeros(N, (degree-1)*(N)); %Rows: channels, Columns: polynomial terms DELETE
+% A = zeros(N, size(Phi,2));   
+% % Fit each channel's time-series data using least squares
+% for m = 1:N
+%     y = X1(m, :)';                 % Column vector for time series of channel m
+%     a = Phi \ y;                  % Solve least squares: Phi * a ≈ y
+%     A(m, :) = a';                 % Store in row
+% end
+% 
+% 
+% lqrec = Phi * A';
 
 B=pinv(Phi)*X1';
 % g=B.'*Psi_mX.';
@@ -126,19 +127,15 @@ B=pinv(Phi)*X1';
 
 %Run the next couple lines to verify
 %that B fulfils eq16 in Williams:
-        g=B.'*Psi_mX.';   %the full state observable g(x)
+g=B.'*Psi_mX.';   %the full state observable g(x)
 %g=B.'*Psi_mX;   %the full state observable g(x)
 CC=g-X1;  %error between g(x) and original data
 
-figure;
-surf(g, 'EdgeColor','none')
-title('Full state observabe g(x)')
-
-G = (Psi_mX'*Psi_mX)/M;
+%January mod: take away GAK:
+G = (Psi_mX'*Psi_mX)/M;  
 A = (Psi_mX'*Psi_mY)/M;
 K = pinv(G)*A;    %The eDMD approximation to the Koopman operator
-clear G A
-
+% clear G A
 %We introduce SVD to truncate K
 [u,sig,v] = svd(K, 'econ'); % Performs svd on the data
 %r=5; %rank truncation parameter is at the parameters section
@@ -146,6 +143,25 @@ u_t = u(:,1:r);
 sig_t = sig(1:r,1:r); 
 v_t = v(:,1:r); % r-truncate U, Sigma & V
 Kt = u_t*sig_t*v_t' ;   %Generates the truncated Kt
+%January mod: take away GAK
+
+
+%  %January mod: new K
+% [U,S,V] = svd(Psi_mX / sqrt(M), 'econ');  % Psi_mX is (2D x M)
+% singvals = diag(S);
+% cfg.trunk = 1e-4;
+% r = find(singvals >= cfg.trunk, 1, 'last');
+% U = U(:,1:r);
+% S = S(1:r,1:r);
+% V = V(:,1:r);
+% Kt2 = (S \ (U' * (Psi_mY/sqrt(M)) * V));    
+
+%Up to here, we know kt dimentions are given by the dictionary size and kt2
+%by the truncation, even when their rank is the same. We need to find
+%(downstream) what operation (similarity transformation of just a lifting)
+
+
+
 
 %Calculate and normalize eigenvectors: 
 [XI,MU,W] = eig(Kt,"nobalance");       %Generate eigenvalues and left-right eigenvctors
@@ -159,10 +175,12 @@ ip_angle = angle(scaledIP);     %phase of w_n'xi_k products in the c. plane
 %an_cor = exp(1i * +ip_angle);                      %angle correction factor
 an_cor = exp(1i * ip_angle);                      %angle correction factor
 Wnn = Wn.*an_cor;                                 %normalized w eigevectors
+%Wnn2 = V*Wnn; %January mod
 ipfinal = sum(conj(Wnn).*XI); %this should be vector of ones if all went ok
 
 %Calculate the Koopman modes v_i
 V = (Wnn'*B).';    %eDMDSVD: We use conjugate transpose now...
+%V = (Wnn2'*B).';    %January mode
 V(isnan(V)) = 0; %remove all undefined entries.
 
 %State reconstruction with discrete-time eigenvalues:
@@ -182,44 +200,17 @@ Xr_rec = reshape(Xr_col_n, orN, M);
 %rem=Xr_rec-X_0(:, 1:1597); %This needs to be generalized!!!
 %E=norm(rem,"fro")/norm(X1,"fro");
 
-%Freq and Power 
-P = vecnorm(V).^2; %Power per mode
-f = diag(abs(imag(MU)./(6.28.*0.004)));
-[fsorted,I] = sort(f);
-Psorted = P(I);
-
-
 
 %Graphs: Artificial dataset and eDMD reconstruction
 figure;
 subplot(2,1,1)
 surf(X_0_rec, 'EdgeColor','none')
-title('artificial dataset')
+title('artificial dataset', siggma)
 subplot(2,1,2)
 surf(Xr_rec, 'EdgeColor','none')
 title(sprintf('eDMD, period (\\omega = %.2f)', omega));   % Add omega value
 title('eDMD reconstruction')
 
-%Graphs: Eigenvalues, left and right eigenvectors
-figure;
-subplot(2,3,1)
-surf(real(Wnn), 'EdgeColor','none')
-title('real W normalized');
-subplot(2,3,2)
-surf(real(XI), 'EdgeColor','none')
-title('real XI');
-subplot(2,3,3)
-surf(real(MU), 'EdgeColor','none')
-title('real MU');
-subplot(2,3,4)
-surf(imag(Wnn), 'EdgeColor','none')
-title('imag W normalized');
-subplot(2,3,5)
-surf(imag(XI), 'EdgeColor','none')
-title('imag XI');
-subplot(2,3,6)
-surf(imag(MU), 'EdgeColor','none')
-title('imag MU');
 
 %Graphs: SVD singular values (and truncated sv)
 figure;
@@ -230,14 +221,3 @@ subplot(1,2,2)
 plot(sig_t)
 title('truncated SVD sigma');
 
-%Graphs power and frequency per mode
-figure;
-subplot(3,1,1)
-plot(P)
-title('Power per mode')
-subplot(3,1,2)
-plot(diag(f))
-title('freq per mode')
-subplot(3,1,3)
-plot(fsorted,Psorted)
-title('freq vs power')
