@@ -219,7 +219,7 @@ Support
 * For questions or usage help, please open an issue in the repository. We will do our best to respond, but response times may vary
 
 
+### License
 
-
-
-
+This project is licensed under the GNU General Public License v3.0 (GPL-3.0).
+See the LICENSE file for details.
