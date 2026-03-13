@@ -25,7 +25,7 @@ function dataout = ft_edmdanalysis(cfg, datain)
 %                'raw': generates a reconstruction of the original data,
 %                based on the mode decomposition 'seen through' the
 %                dictionary and the first snapshot of the data.
-%                'freq': generates a a spectrum derived from Koopman 
+%                'freq': generates a spectrum derived from Koopman 
 %                eigenvalues
 %                'binned_peak_freq': generates a freq structure with binned 
 %                dominant frequencies. The bins can be customized and as 
@@ -53,6 +53,8 @@ function dataout = ft_edmdanalysis(cfg, datain)
 %                     the max degree. Increase carefully (default = 3)
 %    cfg.foi          vector 1 x numfoi, frequencies of interest
 %    cfg.smooth       0 or 1, optional smoothing in the frequency interpolation
+%    cfg.normalize_recon = true/false (default = false) normalizes the
+%                     reconstruction
 %
 %The configuration can also contain any parameters needed for the specific
 %analysis:
@@ -130,9 +132,6 @@ function dataout = ft_edmdanalysis(cfg, datain)
 %
 %   - Mode-level information (modefreqs and modepowers) is always computed
 %     internally but only returned for the 'freq' output.
-%cfg = ft_checkconfig(cfg, 'allowed',{'cut','gamma','D','nstacks','MA',...
-%    'seed','freqEdges','verbose','dictionary','poly_degree',...
-%    'hermite_degree','foi','smooth','output','channel','trials','latency'});
 % -----------------------------
 % Preamble setup
 % -----------------------------
@@ -150,8 +149,8 @@ ft_preamble provenance datain
 % Validate input data
 % -----------------------------
 datain = ft_checkdata(datain, ...
-    'datatype', {'raw','raw+comp'}, ...
-    'hassampleinfo', 'yes');
+  'datatype', {'raw','raw+comp'}, ...
+  'hassampleinfo', 'yes');
 
 cfg = ft_checkconfig(cfg, 'required', {});
 
@@ -176,7 +175,7 @@ cfg.hermite_degree = ft_getopt(cfg, 'hermite_degree', 3);
 cfg.foi            = ft_getopt(cfg, 'foi', [1:100]);
 cfg.smooth         = ft_getopt(cfg, 'smooth', 0);
 cfg.output         = ft_getopt(cfg, 'output', 'freq');
-
+cfg.normalize_recon= ft_getopt(cfg, 'normalize_recon', false);
 
 % Validate types of data and adequate intervals: 
 cfg = ft_checkopt(cfg, 'dictionary', 'char', {'rff','poly','hermite','identity'});
@@ -184,50 +183,45 @@ cfg = ft_checkopt(cfg, 'foi', 'double');
 cfg = ft_checkopt(cfg, 'output', 'char', {'freq','binned_peak_freq','raw'});
 cfg = ft_checkopt(cfg, 'freqEdges', 'ascendingdoublevector');
 if strcmp(cfg.dictionary, 'hermite') % validate hermite_degree only if hermite exists 
-        cfg = ft_checkopt(cfg, 'hermite_degree', 'double');
+   cfg = ft_checkopt(cfg, 'hermite_degree', 'double');
 end
 if strcmp(cfg.dictionary, 'poly') % validate poly_degree only if poly exists 
-         cfg = ft_checkopt(cfg, 'poly_degree', 'double');
+   cfg = ft_checkopt(cfg, 'poly_degree', 'double');
 end
 
-if ~isnumeric(cfg.cut) | ~isscalar(cfg.cut) || cfg.cut<0 || cfg.cut>=1
-    ft_error('cfg.cut must be numerical, scalar, inside the (0,1] interval');
+if ~isnumeric(cfg.cut) || ~isscalar(cfg.cut) || cfg.cut<0 || cfg.cut>=1
+   ft_error('cfg.cut must be numerical, scalar, inside the (0,1] interval');
 end
 if ~isnumeric(cfg.D) || ~isscalar(cfg.D) || cfg.D<=0
-    ft_error('cfg.D must be scalar and positive');
+   ft_error('cfg.D must be scalar and positive');
 end
 if ~isnumeric(cfg.nstacks) ||   floor(cfg.nstacks)-cfg.nstacks ~= 0 || cfg.nstacks<1
-    ft_error('cfg.nstacks must be numerical, no decimal part, equal or greater than 1');
+   ft_error('cfg.nstacks must be numerical, no decimal part, equal or greater than 1');
 end
 if ~isnumeric(cfg.gamma) || ~isscalar(cfg.gamma) || cfg.gamma<1
-    ft_error('cfg.gamma must be numerical, scalar, positive');
+   ft_error('cfg.gamma must be numerical, scalar, positive');
 end
-
-
 
 %Flag for reconstruction:
 do_reconstruct = strcmp(cfg.output, 'raw');
-
 
 % -----------------------------
 % Channel / trial / latency selection
 % -----------------------------
 % Only use channel selection if field exists
 if isfield(cfg,'channel')
-    % Only keep channels that actually exist
-    cfg.channel = intersect(cfg.channel, datain.label);
+  % Only keep channels that actually exist
+   cfg.channel = intersect(cfg.channel, datain.label);
 end
 
-%datain = ft_selectdata(cfg, datain); remove
-%we take only channel trials  and latency, so ft_selectdata doesn't flag
-%the cfg.foi item:
+% we take only channel trials  and latency, so ft_selectdata doesn't flag
+% the cfg.foi item:
 cfgsel = [];   
 cfgsel.channel = ft_getopt(cfg, 'channel', 'all');
 cfgsel.trials  = ft_getopt(cfg, 'trials', 'all');
 cfgsel.latency = ft_getopt(cfg, 'latency', 'all');
 
 datain = ft_selectdata(cfgsel, datain);
-
 
 % Validate again after selection
 if isempty(datain.trial)
@@ -251,18 +245,20 @@ nFreq = length(freq); % freq cardinality
 % -----------------------------
 % Binning parameters
 % -----------------------------
+
 freqEdges = cfg.freqEdges;
 numBins   = length(freqEdges)-1;
 
 % -----------------------------
 % Seed RNG for reproducibility
 % -----------------------------
-%rng(cfg.seed);
+
 rng(cfg.seed, 'twister');
 
 % -----------------------------
 % Preallocate outputs
 % -----------------------------
+
 nTrials      = numel(datain.trial);
 peakfeatures = cell(1, nTrials);
 sumfeatures  = cell(1, nTrials);
@@ -270,8 +266,6 @@ modefreqs    = cell(1, nTrials);
 modepowers   = cell(1, nTrials);
 pow_all  = nan(nTrials, 1, nFreq);
 xrecon = cell(1, nTrials);
-
-
 
 % ----------------------
 % Main eDMD loop: (process each trial independently)
@@ -317,6 +311,25 @@ for tr = 1:nTrials
     % ------------------------------------
     % Dictionary construction
     % ------------------------------------
+
+    %Dictionary dimentional safeguards:
+
+    %Error in case the user chooses an unreasonably large poly dictionary            
+    if strcmp(cfg.dictionary,'poly')
+       approx_terms = nchoosek(size(X1,1) + cfg.poly_degree, cfg.poly_degree);
+    if approx_terms > 1e5
+       ft_error('Polynomial dictionary is too large (>1e5 terms). Reduce degree or stacking.');
+    end
+    %Error in case the user chooses an unreasonably large rff dictionary
+    end
+    if strcmp(cfg.dictionary,'rff')
+       feature_dim = 2 * cfg.D;
+    if feature_dim > 5000
+       ft_warning('Large RFF dictionary (%d features). Computation may be slow.', feature_dim);
+    end
+    end
+
+    %Dictionary Switch: 
     switch lower(cfg.dictionary)
 
         case 'rff'
@@ -332,7 +345,6 @@ for tr = 1:nTrials
 
         case 'poly'
         d = cfg.poly_degree;
-
         Psi_mX = buildPolynomialDictionary(X1, d);
         Psi_mY = buildPolynomialDictionary(X2, d);
         
@@ -348,20 +360,19 @@ for tr = 1:nTrials
         otherwise
         ft_error('Unknown dictionary type: %s', cfg.dictionary);
     end
-%%
     % ----------------------
     % Build compact K operator: Phi / B / U / S / V / Kt2 / 
     % ----------------------
       
     [U,S,V] = svd(Psi_mX / sqrt(M), 'econ');  
-    %singvals = diag(S);
     singvals = diag(S).^2; %the sum of S square is the total energy
     r = find(cumsum(singvals) >= cfg.cut * sum(singvals), 1, 'first');
+    rank_used(tr) = r;
     U = U(:,1:r);
     S = S(1:r,1:r);
     V = V(:,1:r);
     Kt2 = (S \ (U' * (Psi_mY/sqrt(M)) * V));    
-    B = V*pinv(S)*U' * X1';   %using SVD of Psi_mX (new, fast full-state matrix:)
+    B = V*pinv(S)*U' * X1';   %using SVD of Psi_mX (faster matrix building)
     
     % ----------------------
     % Eigendecomposition of K: Wnn / MU / XI
@@ -383,7 +394,6 @@ for tr = 1:nTrials
     V_modes = (Wnn'*V'*B).';    %We must project l-eigenvectors on V' to recover time dimensions
     V_modes(isnan(V_modes)) = 0; %remove all undefined entries.
 if do_reconstruct == 1   
-%if strcmp(cfg.reconstruct, 'yes')
     mu = repmat(diag(MU)', M, 1);
     row_indices = (1:M)';  % Create a column vector of row indices
     mu_p = mu .^ row_indices;  % Element-wise exponentiation
@@ -394,8 +404,10 @@ if do_reconstruct == 1
     orN = nChannels; %Original number of channels nChannels
     Xr = Xrr(1:orN,:); %Remove copies from the stacking 
     Xr_col = Xr(:);
-    Xr_col_n = normalize(Xr_col, "range");
-    Xr_rec = reshape(Xr_col_n, orN, M);
+if  cfg.normalize_recon
+    Xr_col = normalize(Xr_col, "range");
+end
+    Xr_rec = reshape(Xr_col, orN, M);
 end
     % ----------------------
     % Frequency and power calculation per mode
@@ -405,6 +417,8 @@ end
     % compute frequency per mode:
     %dt = 1; % user may change or pass in sampling freq if available (datain.fsample)
     dt = 1 / datain.fsample;
+    % Frequencies derived from Koopman eigenvalues, they are not FFT-based
+    % Absolute value used since spectrum is symmetric in ±f.
     f_modes = abs(angle(diag(MU)) / (2*pi*dt));
     f_modes(f_modes < 1e-6) = 0;     % threshold tiny freqs
 
@@ -467,9 +481,9 @@ end
     end
 end
 
-%%%%%%%%%%%%%%%%%%%%%%%
+%----------------------------------
 % Wrap outputs into FT-style struct
-%%%%%%%%%%%%%%%%%%%%%%%%
+%----------------------------------
 nbins = length(freqEdges) - 1;
 bin_centers = (freqEdges(1:end-1) + freqEdges(2:end)) / 2;
 
@@ -487,7 +501,6 @@ binnedout.label     = {'edmd'};
 binnedout.freq      = bin_centers;
 binnedout.powspctrm = pow_bins;
 binnedout.dimord    = 'rpt_chan_freq';
-
 binnedout.cfg = cfg;
 
 % Keep peak frequencies as extra information
@@ -500,28 +513,26 @@ dataout.peakfeatures = peakfeatures;
 dataout.sumfeatures = sumfeatures;
 dataout.modefreqs = modefreqs;
 dataout.modepowers = modepowers;
+dataout.rank = rank_used;
 
-
-    freqout = [];
-
-    freqout.label     = {'edmd'};
-    freqout.freq      = freq;
-    freqout.powspctrm = pow_all;
-    freqout.dimord    = 'rpt_chan_freq';
-    freqout.cfg       = cfg;
+freqout = [];
+freqout.label     = {'edmd'};
+freqout.freq      = freq;
+freqout.powspctrm = pow_all;
+freqout.dimord    = 'rpt_chan_freq';
+freqout.cfg       = cfg;
 
 % Diagnostics (keep!)
-    freqout.modefreqs  = modefreqs;
-    freqout.modepowers = modepowers;
+freqout.modefreqs  = modefreqs;
+freqout.modepowers = modepowers;
+freqout.rank = rank_used;
 
-
-
-    rawout = [];
-    rawout.label   = datain.label;
-    rawout.trial   = xrecon;
-    % rawout.time needs a small correction since stacking consumes nstacks 
-    % time points
-    rawout.time = cell(1, nTrials);
+rawout = [];
+rawout.label   = datain.label;
+rawout.trial   = xrecon;
+% rawout.time needs a small correction since stacking consumes nstacks 
+% time points
+rawout.time = cell(1, nTrials);
 for tr = 1:nTrials 
   if ~isempty(xrecon{tr})
     t0 = datain.time{tr}(1);
@@ -530,9 +541,9 @@ for tr = 1:nTrials
     rawout.time{tr} = []; % or skip the trial earlier
   end
 end
-    rawout.fsample = datain.fsample;
-    rawout.dimord  = 'rpt_chan_time';
-    rawout.cfg     = cfg;
+rawout.fsample = datain.fsample;
+rawout.dimord  = 'rpt_chan_time';
+rawout.cfg     = cfg;
 
 
 %%%%%%%%%%%%%%%%%%%%%%%
