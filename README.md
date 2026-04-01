@@ -83,7 +83,7 @@ Three output modes are available:
 ## Minimal Example
 ```
 cfg = [];
-dataout = ft_edmd2(cfg, datain);
+dataout = ft_edmdanalysis(cfg, datain);
 ```
 This runs eDMD on a random Fourier features dictionary (as default) on all trials and returns a spectrum derived from Koopman eigenvalues (also as default).
 
@@ -92,7 +92,7 @@ This runs eDMD on a random Fourier features dictionary (as default) on all trial
 cfg = [];
 cfg.dictionary = 'identity';
 
-dataout = ft_edmd2(cfg, datain);
+dataout = ft_edmdanalysis(cfg, datain);
 ```
 This runs classical DMD and returns a FieldTrip frequency structure containing the Koopman-derived spectrum.
 
@@ -102,7 +102,7 @@ cfg = [];
 cfg.dictionary = 'poly';
 cfg.poly_degree = 3;
 
-dataout = ft_edmd2(cfg, datain);
+dataout = ft_edmdanalysis(cfg, datain);
 ```
 This constructs a monomial polynomial dictionary up to degree 3.
 
@@ -112,7 +112,7 @@ cfg = [];
 cfg.dictionary = 'hermite';
 cfg.hermite_degree = 3;
 
-dataout = ft_edmd2(cfg, datain);
+dataout = ft_edmdanalysis(cfg, datain);
 ```
 This applies probabilists’ Hermite polynomials independently to each channel.
 
@@ -209,7 +209,7 @@ dataout.cfg
 
 The main entry point of the package is:
 
-`ft_edmd2(cfg, datain)`
+`ft_edmdanalysis(cfg, datain)`
 
 
 Inputs: refer to FieldTrip documentation for a complete description.
