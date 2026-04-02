@@ -1,12 +1,14 @@
-## Random Fourier features in eDMD for analyzing low beta, theta neural dynamics of working memory
+## Extended dynamic mode decomposition (eDMD) over nonlinear dictionaries for neural data pipelines
 David Chavez Huerta
 ## Introduction
 
-This software provides a MATLAB implementation of the Extended Dynamic Mode Decomposition (eDMD) algorithm to be integrated with the FieldTrip software toolbox for MEG, EEG and iEEG analysis. The presented software offers several sets of observable functions: Random Fourier features (RFF), Hermite polynomials, polynomial basis, and the identity observable.
-Through the mode decomposition inherent to eDMD, the user has the option to generate a reconstruction of the dynamics in the data from the initial state. 
-Frequency content is deduced from the eDMD modes. Power associated to these frequencies is also calculated. By binning the frequency content into relevant neural bands (alpha, beta, gamma...), peak frequencies per band are calculated, as well as total power per band.  
+This software provides a FieldTrip-integrated implementation of the Extended Dynamic Mode Decomposition (eDMD) algorithm for multi-channel neural data (MEG, EEG, and iEEG) analysis. eDMD is a data-driven method that generates an approximation to the Koopman operator over a set of observable functions. 
 
-The package is meant to integrate with FieldTrip, enabling users to incorporate nonlinear methods into existing EEG workflows
+The frequency content of the neural data is deduced from the eDMD modes. Power associated with these frequencies is also calculated. By binning the frequency content into relevant neural bands (alpha, beta, gamma...), peak frequencies per band are calculated, as well as total power per band. Through the mode decomposition inherent to eDMD, the user can reconstruct the data dynamics from the initial snapshot. The function offers several possibilities for the set of observable functions: Random Fourier features (RFF), Hermite polynomials, polynomial basis, and the identity observable.
+
+The package is meant to integrate with the user's FieldTrip pipeline, enabling them to incorporate nonlinear methods into existing workflows.
+
+An overview of eDMD and its relation to the Koopman operator can be found in **[Matthew O. Williams' paper](https://link.springer.com/article/10.1007/s00332-015-9258-5)**. A manuscript on our own eDMD algorithm is still to be published. 
 
 ## Statement of need
 
@@ -41,14 +43,15 @@ The package aims to allow researchers to incorporate eDMD-based modeling directl
 
 * Clone the repository using Git:
 
-`git clone https://github.com/DchavezGH/edmd-meg-working-memory`
-
+`git clone https://github.com/DchavezGH/ft_edmdanalysis`
 
 * Or download the ZIP file and extract it
 
 * Add the repository folder to your MATLAB path:
 
 `addpath(genpath('path_to_repo'))`
+
+* Then ft_edmdanalysis can be called as any other FieldTrip function.
 
 ### Reproducibility
 
@@ -58,16 +61,17 @@ The package aims to allow researchers to incorporate eDMD-based modeling directl
 
 * Tested Configuration
 
-MATLAB R2023b
+   * MATLAB R2023b
 
-FieldTrip (2024 stable release)
+   * FieldTrip (2024 stable release)
 
-* Users are encouraged to report compatibility issues via the project repository.
+* Users are encouraged to report compatibility issues via this repository 
+
 
 NOTE:
 The computational complexity of eDMD depends on dictionary size, data sampling, number of channels, and stacking depth. Users should adjust cfg.D, cfg.poly_degree, and cfg.nstacks carefully for large trials.
 
-## Example Usage
+## Basic Usage
 
 The function `ft_edmdanalysis` performs Extended Dynamic Mode Decomposition (eDMD) on FieldTrip raw data structures.  
 The input data must be a valid FieldTrip **raw structure** containing time series data in `datain.trial`.
@@ -80,14 +84,16 @@ Three output modes are available:
 - `'raw'` – reconstructed time-domain signal using the Koopman model
 
 ---
-## Minimal Example
+### Using random Fourier features dictionary
 ```
 cfg = [];
+cfg.dictionary = 'rff';
+
 dataout = ft_edmdanalysis(cfg, datain);
 ```
-This runs eDMD on a random Fourier features dictionary (as default) on all trials and returns a spectrum derived from Koopman eigenvalues (also as default).
+This runs eDMD using a random Fourier features dictionary on all trials in datain and returns a spectrum derived from Koopman eigenvalues. Random Fourier features are also the default dictionary.
 
-## Using identity dictionary
+### Using identity dictionary
 ```
 cfg = [];
 cfg.dictionary = 'identity';
@@ -96,7 +102,7 @@ dataout = ft_edmdanalysis(cfg, datain);
 ```
 This runs classical DMD and returns a FieldTrip frequency structure containing the Koopman-derived spectrum.
 
-## Using a Polynomial Dictionary
+### Using a Polynomial Dictionary
 ```
 cfg = [];
 cfg.dictionary = 'poly';
@@ -106,7 +112,7 @@ dataout = ft_edmdanalysis(cfg, datain);
 ```
 This constructs a monomial polynomial dictionary up to degree 3.
 
-## Using a Hermite Dictionary
+### Using a Hermite Dictionary
 ```
 cfg = [];
 cfg.dictionary = 'hermite';
@@ -116,7 +122,11 @@ dataout = ft_edmdanalysis(cfg, datain);
 ```
 This applies probabilists’ Hermite polynomials independently to each channel.
 
-## Binned Frequency Representation
+## Function Output
+
+As default, ft_edmdanalysis will output a FieldTrip freq structure, containing a spectrum generated from the Koopman decomposition. Details on the output structures are in the following section. Two other output options are available:  
+
+### Binned Frequency Representation
 
 To aggregate Koopman mode power into predefined frequency bands:
 ```
@@ -134,124 +144,120 @@ This returns a FieldTrip frequency structure where:
 
 Peak frequencies per trial are stored in dataout.peakfreq
 
-## State Reconstruction
+### State Reconstruction
 
 To reconstruct the time-domain signal from Koopman modes:
-
+```
 cfg = [];
 cfg.output = 'raw';
 
 dataout = ft_edmdanalysis(cfg, datain);
-
+```
 This returns a FieldTrip raw structure containing reconstructed signals.
 
-Optional normalization of the reconstruction with cfg.normalize_recon = true;
+Optional normalization of the reconstruction can be enabled with `cfg.normalize_recon = true`
 
-### Output Structures
+## Output Structures
 
 The structure of `dataout` depends on `cfg.output`.
 
 
-## 1. `cfg.output = 'freq'`
+### 1. `cfg.output = 'freq'`
 
-Returns a FieldTrip frequency structure representing the interpolated Koopman spectrum.
+Returns a FieldTrip frequency structure representing the interpolated Koopman spectrum. This is the default output when `cfg.output` is empty (`[]`).
 
 Fields:
 
-dataout.label = {'edmd'}
-dataout.freq = frequency vector (cfg.foi)
-dataout.powspctrm = [Ntrials x 1 x Nfreq]
-dataout.dimord = 'rpt_chan_freq'
-dataout.cfg
+* dataout.label = {'edmd'}
+* dataout.freq = frequency vector (cfg.foi)
+* dataout.powspctrm = [Ntrials x 1 x Nfreq]
+* dataout.dimord = 'rpt_chan_freq'
+* dataout.cfg
 
 Additional diagnostics:
 
-dataout.modefreqs
-dataout.modepowers
-dataout.rank
+* dataout.modefreqs
+* dataout.modepowers
+* dataout.rank
 
-Each cell corresponds to one trial.
+Each entry corresponds to one trial.
 
 
-## 2. `cfg.output = 'binned_peak_freq'`
+### 2. `cfg.output = 'binned_peak_freq'`
 
 Returns a FieldTrip frequency structure where power is aggregated in frequency bins.
 
 Fields:
 
-dataout.label = {'edmd'}
-dataout.freq = bin centers
-dataout.powspctrm = [Ntrials x 1 x Nbins]
-dataout.dimord = 'rpt_chan_freq'
-dataout.cfg
+* dataout.label = {'edmd'}
+* dataout.freq = bin centers
+* dataout.powspctrm = [Ntrials x 1 x Nbins]
+* dataout.dimord = 'rpt_chan_freq'
+* dataout.cfg
 
 Additional information:
 
-dataout.peakfreq
+* dataout.peakfreq
 
 
-## 3. `cfg.output = 'raw'`
+### 3. `cfg.output = 'raw'`
 
 Returns a FieldTrip raw structure containing reconstructed signals.
 
 Fields:
 
-dataout.label
-dataout.trial
-dataout.time
-dataout.fsample
-dataout.dimord
-dataout.cfg
+* dataout.label
+* dataout.trial
+* dataout.time
+* dataout.fsample
+* dataout.dimord
+* dataout.cfg
 
 
-
-### API
+## API
 
 The main entry point of the package is:
 
 `ft_edmdanalysis(cfg, datain)`
 
 
-Inputs: refer to FieldTrip documentation for a complete description.
+#### Inputs:
 
 `cfg` – configuration structure controlling the decomposition
 
 `datain` – FieldTrip raw data structure
 
 
-Key Configuration Options
+#### Key Configuration Options
 
 
-* dictionary – 'identity', 'rff', 'poly', or 'hermite'
+* Dictionary:  `cfg.dictionary`= `'identity'`, `'rff'`, `'poly'`, or `'hermite'`
 
-* Output selection cfg.output - 'freq', 'binned_peak_freq' or 'raw'
+*  Output selection: `cfg.output` = `'freq'`, `'binned_peak_freq'`, or `'raw'`
+#### Dictionary parameters:
 
-Dictionary parameters:
+`cfg.D` number of random Fourier features
+`cfg.gamma` RFF scaling parameter
+`cfg.poly_degree` polynomial degree
+`cfg.hermite_degree` Hermite polynomial degree
 
-cfg.D number of random Fourier features
-cfg.gamma RFF scaling parameter
-cfg.poly_degree polynomial degree
-cfg.hermite_degree Hermite polynomial degree
+#### Algorithm parameters:
 
-Algorithm parameters:
+`cfg.nstacks` Hankel stacking depth  
+`cfg.MA` moving average window 
+`cfg.cut` rank truncation threshold
+`cfg.seed` RNG seed for RFF reproducibility
 
+#### Spectral parameters:
 
-cfg.nstacks Hankel stacking depth
-cfg.MA moving average window
-cfg.cut rank truncation threshold
-cfg.seed RNG seed for RFF reproducibility
+`cfg.foi` frequencies of interest
+`cfg.freqEdges` frequency bin edges
+`cfg.smooth` smoothing window for spectrum
 
+#### Reconstruction normalization option:
 
-Spectral parameters:
+`cfg.normalize_recon` true / false
 
-cfg.foi frequencies of interest
-cfg.freqEdges frequency bin edges
-cfg.smooth smoothing window for spectrum
-
-
-Reconstruction normalization option:
-
-cfg.normalize_recon true / false
 
 
 ### Community Guidelines
