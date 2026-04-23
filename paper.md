@@ -76,6 +76,6 @@ Microsoft Copilot was used on occasion during the development of this work to tr
 
 # Acknowledgements
 
-We acknowledge the contributions of Bart De Schutter in the review of this manuscript. Likewise, we acknowledge Jan-Mathijs Schoffelen and Robert Oostenveld from the FieldTrip developing team for their assistance with integration and compatibility. 
+We acknowledge the contributions of Bart De Schutter in the review of this manuscript. Likewise, we acknowledge the assistance with integration and compatibility of Jan-Mathijs Schoffelen and Robert Oostenveld from the FieldTrip developing team. We also acknowledge the support of the Delft Center for Systems and Control, Faculty of Mechanical Engineering, TU Delft.
 
 # References
