@@ -31,8 +31,7 @@ license: GPL-3.0
 # Summary
 This software provides a MATLAB implementation of the Extended Dynamic Mode Decomposition (eDMD) algorithm integrated with the FieldTrip software toolbox [@Oostenveld2010FieldTripOS] for neural data analysis. The presented software offers several sets of observable functions: Random Fourier features (RFFs), Hermite sequences, a polynomial basis, and the identity observable.
 Through the mode decomposition inherent to eDMD, the user can generate a reconstruction of the dynamics in the data. 
-Frequency content is deduced from the eDMD modes. Power associated to these frequencies is also calculated. By binning frequency content into standard brainwave bands (i.e., delta, theta, alpha, beta, gamma), peak frequencies per band are calculated, as well as total power per band.  
-The specific outputs -signal reconstruction, a spectrum, or binned dominant frequency- are generated as standard Fieldtrip data structures so eDMD can be immediately integrated in existing analysis pipelines.   
+Frequency content is deduced from the eDMD modes. Power associated to these frequencies is also calculated. By binning frequency content into standard brainwave bands (i.e., delta, theta, alpha, beta, gamma), peak frequencies per band are calculated, as well as total power per band. The specific outputs (a signal reconstruction, a spectrum, or a binned dominant-frequency) are generated as standard Fieldtrip data structures so eDMD can be immediately integrated in existing analysis pipelines.   
 
 The package integrates with FieldTrip, enabling users to incorporate nonlinear methods into existing EEG workflows that currently rely on linear algorithms. The software also allows for the implementation of custom dictionaries, making it adaptable to task-specific and model-specific nonlinear representations. The software is meant to support researchers studying neural dynamics, cognitive processes, and data-driven modeling in neuroscience. 
 
